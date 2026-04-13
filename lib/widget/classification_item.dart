@@ -17,7 +17,10 @@ class ClassificatioinItem extends StatelessWidget {
       child: Row(
         children: [
           Expanded(
-            child: Text(item, style: Theme.of(context).textTheme.headlineMedium),
+            child: Text(
+              item,
+              style: Theme.of(context).textTheme.headlineMedium,
+            ),
           ),
           const SizedBox(width: 16),
           Text(value, style: Theme.of(context).textTheme.titleMedium),

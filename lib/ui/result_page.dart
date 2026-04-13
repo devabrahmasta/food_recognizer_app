@@ -94,35 +94,41 @@ class _ResultBodyState extends State<_ResultBody> {
         _isLoadingGemini = true;
       });
 
-      final mealFuture = _mealDbService.searchMealByName(_foodName).then((data) {
-        if (!mounted) return;
-        setState(() {
-          _recipeData = data;
-          _mealDbStatus = data != null;
-          _isLoadingMealDb = false;
-        });
-      }).catchError((_) {
-        if (!mounted) return;
-        setState(() {
-          _mealDbStatus = false;
-          _isLoadingMealDb = false;
-        });
-      });
+      final mealFuture = _mealDbService
+          .searchMealByName(_foodName)
+          .then((data) {
+            if (!mounted) return;
+            setState(() {
+              _recipeData = data;
+              _mealDbStatus = data != null;
+              _isLoadingMealDb = false;
+            });
+          })
+          .catchError((_) {
+            if (!mounted) return;
+            setState(() {
+              _mealDbStatus = false;
+              _isLoadingMealDb = false;
+            });
+          });
 
-      final geminiFuture = _geminiService.getNutritionInfo(_foodName).then((data) {
-        if (!mounted) return;
-        setState(() {
-          _nutritionData = data;
-          _geminiStatus = data != null;
-          _isLoadingGemini = false;
-        });
-      }).catchError((_) {
-        if (!mounted) return;
-        setState(() {
-          _geminiStatus = false;
-          _isLoadingGemini = false;
-        });
-      });
+      final geminiFuture = _geminiService
+          .getNutritionInfo(_foodName)
+          .then((data) {
+            if (!mounted) return;
+            setState(() {
+              _nutritionData = data;
+              _geminiStatus = data != null;
+              _isLoadingGemini = false;
+            });
+          })
+          .catchError((_) {
+            if (!mounted) return;
+            setState(() {
+              _geminiStatus = false;
+              _isLoadingGemini = false;
+            });
+          });
 
       await Future.wait([mealFuture, geminiFuture]);
     } catch (e) {
@@ -190,7 +196,8 @@ class _ResultBodyState extends State<_ResultBody> {
             else if (_geminiStatus == false || _nutritionData == null)
               _buildErrorInfo(
                 icon: Icons.info_outline,
-                message: "Informasi nilai gizi tidak tersedia untuk makanan ini.",
+                message:
+                    "Informasi nilai gizi tidak tersedia untuk makanan ini.",
               )
             else ...[
               _buildNutritionRow("Kalori", _nutritionData!['kalori']),
@@ -210,10 +217,7 @@ class _ResultBodyState extends State<_ResultBody> {
       padding: const EdgeInsets.symmetric(vertical: 4.0),
       child: Row(
         children: [
-          Text(
-            "$label: ",
-            style: const TextStyle(fontWeight: FontWeight.w600),
-          ),
+          Text("$label: ", style: const TextStyle(fontWeight: FontWeight.w600)),
           Text(value?.toString() ?? '-'),
         ],
       ),
@@ -248,13 +252,12 @@ class _ResultBodyState extends State<_ResultBody> {
             else ...[
               Text(
                 _recipeData!['strMeal'] ?? '-',
-                style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                  fontWeight: FontWeight.bold,
-                ),
+                style: Theme.of(
+                  context,
+                ).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold),
               ),
               const SizedBox(height: 12),
 
-              // Foto makanan dari MealDB
               if (_recipeData!['strMealThumb'] != null)
                 ClipRRect(
                   borderRadius: BorderRadius.circular(8),
@@ -263,7 +266,8 @@ class _ResultBodyState extends State<_ResultBody> {
                     height: 200,
                     width: double.infinity,
                     fit: BoxFit.cover,
-                    errorBuilder: (context, error, stackTrace) => const SizedBox(),
+                    errorBuilder: (context, error, stackTrace) =>
+                        const SizedBox(),
                     loadingBuilder: (context, child, loadingProgress) {
                       if (loadingProgress == null) return child;
                       return const SizedBox(
@@ -284,10 +288,13 @@ class _ResultBodyState extends State<_ResultBody> {
                 final i = index + 1;
                 final ingredient = _recipeData!['strIngredient$i'];
                 final measure = _recipeData!['strMeasure$i'];
-                if (ingredient != null && ingredient.toString().trim().isNotEmpty) {
+                if (ingredient != null &&
+                    ingredient.toString().trim().isNotEmpty) {
                   return Padding(
                     padding: const EdgeInsets.symmetric(vertical: 2.0),
-                    child: Text("• $ingredient (${measure?.toString().trim() ?? ''})"),
+                    child: Text(
+                      "• $ingredient (${measure?.toString().trim() ?? ''})",
+                    ),
                   );
                 }
                 return const SizedBox();

@@ -51,7 +51,6 @@ class _HomeBody extends StatelessWidget {
         ),
         const SizedBox(height: 16),
 
-        // Baris 1: Kamera & Galeri
         Row(
           children: [
             Expanded(
@@ -89,13 +88,10 @@ class _HomeBody extends StatelessWidget {
         ),
         const SizedBox(height: 10),
 
-        // Baris 2: Scan Realtime
         FilledButton(
           onPressed: () => Navigator.push(
             context,
-            MaterialPageRoute(
-              builder: (context) => const CameraStreamPage(),
-            ),
+            MaterialPageRoute(builder: (context) => const CameraStreamPage()),
           ),
           child: const Row(
             mainAxisAlignment: MainAxisAlignment.center,

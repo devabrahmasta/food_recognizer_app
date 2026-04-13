@@ -6,9 +6,9 @@ import 'package:food_recognizer_app/service/food_classification_service.dart';
 import 'package:food_recognizer_app/widget/camera_view.dart';
 import 'package:food_recognizer_app/widget/classification_item.dart';
 
-// Viewmodel sesuai pola silabus
 class CameraStreamViewmodel extends ChangeNotifier {
   final FoodClassificationService _service;
+  bool _isDisposed = false;
 
   CameraStreamViewmodel(this._service) {
     _service.initHelper();
@@ -16,7 +16,6 @@ class CameraStreamViewmodel extends ChangeNotifier {
 
   Map<String, double> _classifications = {};
 
-  // Top 1 hasil klasifikasi
   Map<String, double> get classifications => Map.fromEntries(
     (_classifications.entries.toList()
           ..sort((a, b) => b.value.compareTo(a.value)))
@@ -25,11 +24,18 @@ class CameraStreamViewmodel extends ChangeNotifier {
 
   Future<void> runClassification(CameraImage camera) async {
     _classifications = await _service.analyzeImageFromCamera(camera);
-    notifyListeners();
+    // notifyListeners();
+
+    if (!_isDisposed) {
+      notifyListeners();
+    }
   }
 
-  Future<void> close() async {
-    await _service.close();
+  @override
+  void dispose() {
+    _isDisposed = true;
+    _service.close();
+    super.dispose();
   }
 }
 
@@ -69,6 +75,8 @@ class _CameraStreamBody extends StatefulWidget {
 
 class _CameraStreamBodyState extends State<_CameraStreamBody> {
   late final CameraStreamViewmodel readViewmodel;
+  bool _isActive = true;
+  bool _isProcessing = false;
 
   @override
   void initState() {
@@ -78,7 +86,7 @@ class _CameraStreamBodyState extends State<_CameraStreamBody> {
 
   @override
   void dispose() {
-    Future.microtask(() async => await readViewmodel.close());
+    _isActive = false;
     super.dispose();
   }
 
@@ -88,7 +96,14 @@ class _CameraStreamBodyState extends State<_CameraStreamBody> {
       children: [
         CameraView(
           onImage: (cameraImage) async {
-            await readViewmodel.runClassification(cameraImage);
+            if (!_isActive || _isProcessing) return;
+
+            _isProcessing = true;
+
+            final vm = context.read<CameraStreamViewmodel>();
+            await vm.runClassification(cameraImage);
+
+            _isProcessing = false;
           },
         ),
         Positioned(
@@ -100,7 +115,7 @@ class _CameraStreamBodyState extends State<_CameraStreamBody> {
             child: SafeArea(
               bottom: true,
               child: Consumer<CameraStreamViewmodel>(
-                builder: (_, viewmodel, __) {
+                builder: (context, viewmodel, child) {
                   final classifications = viewmodel.classifications.entries;
                   if (classifications.isEmpty) {
                     return const SizedBox.shrink();

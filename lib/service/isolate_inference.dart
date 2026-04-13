@@ -51,7 +51,6 @@ class IsolateInference {
         image_lib.Image? img;
 
         if (isolateModel.cameraImage != null) {
-          // Dari camera stream - sesuai silabus
           img = ImageUtils.convertCameraImage(isolateModel.cameraImage!);
           if (img != null) {
             img = image_lib.copyResize(
@@ -59,13 +58,11 @@ class IsolateInference {
               width: inputShape[1],
               height: inputShape[2],
             );
-            // Rotate 90 di Android sesuai silabus
             if (Platform.isAndroid) {
               img = image_lib.copyRotate(img, angle: 90);
             }
           }
         } else if (isolateModel.imagePath != null) {
-          // Dari gambar statis (galeri/kamera pick)
           img = await image_lib.decodeImageFile(isolateModel.imagePath!);
           if (img != null) {
             img = image_lib.copyResize(
@@ -81,16 +78,12 @@ class IsolateInference {
           continue;
         }
 
-        // Sesuai silabus: imageMatrix sebagai List<List<List<num>>>
         final imageMatrix = List.generate(
           img.height,
-          (y) => List.generate(
-            img!.width,
-            (x) {
-              final pixel = img!.getPixel(x, y);
-              return [pixel.r, pixel.g, pixel.b];
-            },
-          ),
+          (y) => List.generate(img!.width, (x) {
+            final pixel = img!.getPixel(x, y);
+            return [pixel.r, pixel.g, pixel.b];
+          }),
         );
 
         final input = [imageMatrix];
@@ -98,15 +91,14 @@ class IsolateInference {
         final address = isolateModel.interpreterAddress;
         final result = _runInference(input, output, address);
 
-        // Sesuai silabus: hitung confidence score
         int maxScore = result.reduce((a, b) => a + b);
         final keys = isolateModel.labels;
-        final values =
-            result.map((e) => e.toDouble() / maxScore.toDouble()).toList();
+        final values = result
+            .map((e) => e.toDouble() / maxScore.toDouble())
+            .toList();
         var classification = Map.fromIterables(keys, values);
         classification.removeWhere((key, value) => value == 0);
 
-        // Sort dan ambil top 1 untuk static image
         var sortedEntries = classification.entries.toList()
           ..sort((a, b) => b.value.compareTo(a.value));
         var top1 = Map.fromEntries(sortedEntries.take(1));

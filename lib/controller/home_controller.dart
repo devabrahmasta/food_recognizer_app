@@ -16,7 +16,7 @@ class HomeController extends ChangeNotifier {
     final XFile? pickedFile = await _picker.pickImage(source: source);
     if (pickedFile != null) {
       _originalImagePath = pickedFile.path;
-      _croppedImagePath = null; 
+      _croppedImagePath = null;
       notifyListeners();
       await _cropImage(_originalImagePath!);
     }

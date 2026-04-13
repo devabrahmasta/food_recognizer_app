@@ -49,7 +49,6 @@ class FoodClassificationService {
     labels = labelTxt.split('\n');
   }
 
-  // Untuk gambar statis (galeri / kamera pick)
   Future<Map<String, double>> analyzeImage(String imagePath) async {
     try {
       var isolateModel = InferenceModel(
@@ -73,9 +72,9 @@ class FoodClassificationService {
     }
   }
 
-  // Untuk camera stream - sesuai silabus inferenceCameraFrame
   Future<Map<String, double>> analyzeImageFromCamera(
-      CameraImage cameraImage) async {
+    CameraImage cameraImage,
+  ) async {
     try {
       var isolateModel = InferenceModel(
         null,

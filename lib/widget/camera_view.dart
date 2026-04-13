@@ -12,6 +12,7 @@ class CameraView extends StatefulWidget {
 
 class _CameraViewState extends State<CameraView> {
   CameraController? _cameraController;
+  bool _isStreaming = true;
 
   @override
   void initState() {
@@ -34,11 +35,15 @@ class _CameraViewState extends State<CameraView> {
     if (!mounted) return;
 
     setState(() {});
-    _cameraController!.startImageStream(widget.onImage);
+    _cameraController!.startImageStream((image) {
+      if (!_isStreaming || !mounted) return;
+      widget.onImage(image);
+    });
   }
 
   @override
   void dispose() {
+    _isStreaming = false;
     _cameraController?.stopImageStream();
     _cameraController?.dispose();
     super.dispose();
