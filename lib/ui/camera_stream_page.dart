@@ -24,7 +24,6 @@ class CameraStreamViewmodel extends ChangeNotifier {
 
   Future<void> runClassification(CameraImage camera) async {
     _classifications = await _service.analyzeImageFromCamera(camera);
-    // notifyListeners();
 
     if (!_isDisposed) {
       notifyListeners();
