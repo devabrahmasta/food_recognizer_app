@@ -1,10 +1,14 @@
+import 'dart:io';
 import 'dart:developer';
 import 'dart:isolate';
+import 'package:camera/camera.dart';
 import 'package:image/image.dart' as image_lib;
 import 'package:tflite_flutter/tflite_flutter.dart';
+import 'package:food_recognizer_app/utils/image_utils.dart';
 
 class InferenceModel {
-  String imagePath;
+  CameraImage? cameraImage;
+  String? imagePath;
   int interpreterAddress;
   List<String> labels;
   List<int> inputShape;
@@ -16,8 +20,9 @@ class InferenceModel {
     this.interpreterAddress,
     this.labels,
     this.inputShape,
-    this.outputShape,
-  );
+    this.outputShape, {
+    this.cameraImage,
+  });
 }
 
 class IsolateInference {
@@ -42,94 +47,70 @@ class IsolateInference {
 
     await for (final InferenceModel isolateModel in port) {
       try {
-        final imagePath = isolateModel.imagePath;
         final inputShape = isolateModel.inputShape;
+        image_lib.Image? img;
 
-        final img = await image_lib.decodeImageFile(imagePath);
-        if (img == null) {
-          throw Exception("Failed to decode image at path: $imagePath");
+        if (isolateModel.cameraImage != null) {
+          // Dari camera stream - sesuai silabus
+          img = ImageUtils.convertCameraImage(isolateModel.cameraImage!);
+          if (img != null) {
+            img = image_lib.copyResize(
+              img,
+              width: inputShape[1],
+              height: inputShape[2],
+            );
+            // Rotate 90 di Android sesuai silabus
+            if (Platform.isAndroid) {
+              img = image_lib.copyRotate(img, angle: 90);
+            }
+          }
+        } else if (isolateModel.imagePath != null) {
+          // Dari gambar statis (galeri/kamera pick)
+          img = await image_lib.decodeImageFile(isolateModel.imagePath!);
+          if (img != null) {
+            img = image_lib.copyResize(
+              img,
+              width: inputShape[1],
+              height: inputShape[2],
+            );
+          }
         }
 
-        image_lib.Image imageInput = image_lib.copyResize(
-          img,
-          width: inputShape[1],
-          height: inputShape[2],
+        if (img == null) {
+          isolateModel.responsePort.send(<String, double>{});
+          continue;
+        }
+
+        // Sesuai silabus: imageMatrix sebagai List<List<List<num>>>
+        final imageMatrix = List.generate(
+          img.height,
+          (y) => List.generate(
+            img!.width,
+            (x) {
+              final pixel = img!.getPixel(x, y);
+              return [pixel.r, pixel.g, pixel.b];
+            },
+          ),
         );
 
+        final input = [imageMatrix];
+        final output = [List<int>.filled(isolateModel.outputShape[1], 0)];
         final address = isolateModel.interpreterAddress;
-        Interpreter interpreter = Interpreter.fromAddress(address);
+        final result = _runInference(input, output, address);
 
-        // CEK TIPE MODEL SECARA DINAMIS UNTUK MENCEGAH NATIVE CRASH
-        final inputType = interpreter.getInputTensor(0).type;
-        final outputType = interpreter.getOutputTensor(0).type;
-
-        // 1. SIAPKAN MATRIKS INPUT
-        dynamic input;
-        if (inputType == TensorType.float32) {
-          input = [
-            List.generate(
-              imageInput.height,
-              (y) => List.generate(imageInput.width, (x) {
-                final pixel = imageInput.getPixel(x, y);
-                return [pixel.r / 255.0, pixel.g / 255.0, pixel.b / 255.0];
-              }),
-            ),
-          ];
-        } else {
-          input = [
-            List.generate(
-              imageInput.height,
-              (y) => List.generate(imageInput.width, (x) {
-                final pixel = imageInput.getPixel(x, y);
-                return [pixel.r, pixel.g, pixel.b];
-              }),
-            ),
-          ];
-        }
-
-        // 2. SIAPKAN WADAH OUTPUT
-        dynamic output;
-        if (outputType == TensorType.float32) {
-          output = [List<double>.filled(isolateModel.outputShape[1], 0.0)];
-        } else {
-          output = [List<int>.filled(isolateModel.outputShape[1], 0)];
-        }
-
-        // 3. EKSEKUSI
-        interpreter.run(input, output);
-        final result = output.first;
-
-        // 4. HITUNG SKOR
-        var classification = <String, double>{};
-
-        if (outputType == TensorType.float32) {
-          final resDouble = result as List<double>;
-          double maxScore = resDouble.reduce((a, b) => a + b);
-          if (maxScore > 0) {
-            for (int i = 0; i < resDouble.length; i++) {
-              if (resDouble[i] > 0) {
-                classification[isolateModel.labels[i]] =
-                    resDouble[i] / maxScore;
-              }
-            }
-          }
-        } else {
-          final resInt = result as List<int>;
-          int maxScore = resInt.reduce((a, b) => a + b);
-          if (maxScore > 0) {
-            for (int i = 0; i < resInt.length; i++) {
-              if (resInt[i] > 0) {
-                classification[isolateModel.labels[i]] = resInt[i] / maxScore;
-              }
-            }
-          }
-        }
-
+        // Sesuai silabus: hitung confidence score
+        int maxScore = result.reduce((a, b) => a + b);
+        final keys = isolateModel.labels;
+        final values =
+            result.map((e) => e.toDouble() / maxScore.toDouble()).toList();
+        var classification = Map.fromIterables(keys, values);
         classification.removeWhere((key, value) => value == 0);
+
+        // Sort dan ambil top 1 untuk static image
         var sortedEntries = classification.entries.toList()
           ..sort((a, b) => b.value.compareTo(a.value));
-
         var top1 = Map.fromEntries(sortedEntries.take(1));
+
         isolateModel.responsePort.send(top1);
       } catch (e, stackTrace) {
         log(
@@ -141,6 +122,17 @@ class IsolateInference {
         isolateModel.responsePort.send(<String, double>{});
       }
     }
+  }
+
+  static List<int> _runInference(
+    List<List<List<List<num>>>> input,
+    List<List<int>> output,
+    int interpreterAddress,
+  ) {
+    Interpreter interpreter = Interpreter.fromAddress(interpreterAddress);
+    interpreter.run(input, output);
+    final result = output.first;
+    return result;
   }
 
   Future<void> close() async {

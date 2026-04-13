@@ -7,7 +7,6 @@ class HomeController extends ChangeNotifier {
   String? _originalImagePath;
   String? _croppedImagePath;
 
-  // Gunakan gambar yang di-crop jika ada, kalau tidak gunakan aslinya
   String? get imagePath => _croppedImagePath ?? _originalImagePath;
   bool get hasImage => _originalImagePath != null;
 
@@ -17,13 +16,12 @@ class HomeController extends ChangeNotifier {
     final XFile? pickedFile = await _picker.pickImage(source: source);
     if (pickedFile != null) {
       _originalImagePath = pickedFile.path;
-      _croppedImagePath = null; // Reset crop saat pilih gambar baru
+      _croppedImagePath = null; 
       notifyListeners();
       await _cropImage(_originalImagePath!);
     }
   }
 
-  // Fungsi untuk memanggil ulang crop pada gambar yang sama
   Future<void> cropCurrentImage() async {
     if (_originalImagePath != null) {
       await _cropImage(_originalImagePath!);
@@ -43,7 +41,6 @@ class HomeController extends ChangeNotifier {
           initAspectRatio: CropAspectRatioPreset.square,
           lockAspectRatio: false,
         ),
-        IOSUiSettings(title: 'Potong Makanan'),
       ],
     );
 

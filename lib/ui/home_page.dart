@@ -1,6 +1,7 @@
 import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:food_recognizer_app/controller/home_controller.dart';
+import 'package:food_recognizer_app/ui/camera_stream_page.dart';
 import 'package:provider/provider.dart';
 import 'package:image_picker/image_picker.dart';
 
@@ -50,6 +51,7 @@ class _HomeBody extends StatelessWidget {
         ),
         const SizedBox(height: 16),
 
+        // Baris 1: Kamera & Galeri
         Row(
           children: [
             Expanded(
@@ -87,18 +89,37 @@ class _HomeBody extends StatelessWidget {
         ),
         const SizedBox(height: 10),
 
+        // Baris 2: Scan Realtime
+        FilledButton(
+          onPressed: () => Navigator.push(
+            context,
+            MaterialPageRoute(
+              builder: (context) => const CameraStreamPage(),
+            ),
+          ),
+          child: const Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Icon(Icons.qr_code_scanner),
+              SizedBox(width: 8),
+              Text("Scan Realtime"),
+            ],
+          ),
+        ),
+        const SizedBox(height: 10),
+
         if (controller.hasImage)
           Column(
             children: [
               FilledButton(
                 onPressed: () =>
                     context.read<HomeController>().goToResultPage(context),
-                child: Row(
+                child: const Row(
                   mainAxisAlignment: MainAxisAlignment.center,
-                  children: [const Text("Analyze")],
+                  children: [Text("Analyze")],
                 ),
               ),
-              const SizedBox(width: 10),
+              const SizedBox(height: 10),
               FilledButton.tonal(
                 onPressed: () =>
                     context.read<HomeController>().cropCurrentImage(),

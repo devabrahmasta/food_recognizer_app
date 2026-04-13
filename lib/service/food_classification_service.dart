@@ -1,5 +1,6 @@
 import 'dart:developer';
 import 'dart:isolate';
+import 'package:camera/camera.dart';
 import 'package:flutter/services.dart';
 import 'package:tflite_flutter/tflite_flutter.dart';
 import 'package:food_recognizer_app/service/firebase_ml_service.dart';
@@ -48,6 +49,7 @@ class FoodClassificationService {
     labels = labelTxt.split('\n');
   }
 
+  // Untuk gambar statis (galeri / kamera pick)
   Future<Map<String, double>> analyzeImage(String imagePath) async {
     try {
       var isolateModel = InferenceModel(
@@ -67,6 +69,32 @@ class FoodClassificationService {
       return results as Map<String, double>;
     } catch (e, stackTrace) {
       log('Error during image analysis', error: e, stackTrace: stackTrace);
+      return <String, double>{};
+    }
+  }
+
+  // Untuk camera stream - sesuai silabus inferenceCameraFrame
+  Future<Map<String, double>> analyzeImageFromCamera(
+      CameraImage cameraImage) async {
+    try {
+      var isolateModel = InferenceModel(
+        null,
+        interpreter.address,
+        labels,
+        inputTensor.shape,
+        outputTensor.shape,
+        cameraImage: cameraImage,
+      );
+
+      ReceivePort responsePort = ReceivePort();
+      isolateInference.sendPort.send(
+        isolateModel..responsePort = responsePort.sendPort,
+      );
+
+      var results = await responsePort.first;
+      return results as Map<String, double>;
+    } catch (e, stackTrace) {
+      log('Error during camera inference', error: e, stackTrace: stackTrace);
       return <String, double>{};
     }
   }

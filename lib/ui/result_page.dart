@@ -37,13 +37,18 @@ class _ResultBodyState extends State<_ResultBody> {
   final GeminiService _geminiService = GeminiService();
 
   bool _isLoadingML = true;
-  bool _isLoadingAPI = true;
+  bool _isLoadingMealDb = false;
+  bool _isLoadingGemini = false;
 
   String _foodName = "Menganalisis...";
   String _confidenceScore = "";
+  bool _isUnrecognized = false;
 
   Map<String, dynamic>? _recipeData;
   Map<String, dynamic>? _nutritionData;
+
+  bool? _mealDbStatus;
+  bool? _geminiStatus;
 
   @override
   void initState() {
@@ -57,51 +62,78 @@ class _ResultBodyState extends State<_ResultBody> {
       await _mlService.initHelper();
       final results = await _mlService.analyzeImage(widget.imagePath);
 
-      if (results.isNotEmpty) {
-        final topResult = results.entries.first;
-        final confidence = topResult.value;
+      if (!mounted) return;
 
-        if (confidence <= 0.40) {
-          if (mounted) {
-            setState(() {
-              _foodName = "Bukan makanan / Tidak Dikenali";
-              _confidenceScore = "${(confidence * 100).toStringAsFixed(2)}%";
-              _isLoadingML = false;
-              _isLoadingAPI = false;
-            });
-          }
-          return; 
-        }
-
-        if (mounted) {
-          setState(() {
-            _foodName = topResult.key;
-            _confidenceScore = "${(confidence * 100).toStringAsFixed(2)}%";
-            _isLoadingML = false;
-          });
-        }
-
-        final mealFuture = _mealDbService.searchMealByName(_foodName);
-        final geminiFuture = _geminiService.getNutritionInfo(_foodName);
-
-        final responses = await Future.wait([mealFuture, geminiFuture]);
-
-        if (mounted) {
-          setState(() {
-            _recipeData = responses[0];
-            _nutritionData = responses[1];
-            _isLoadingAPI = false;
-          });
-        }
-      }
-    } catch (e) {
-      if (mounted) {
+      if (results.isEmpty) {
         setState(() {
           _foodName = "Gagal menganalisis";
           _isLoadingML = false;
-          _isLoadingAPI = false;
+          _isUnrecognized = true;
         });
+        return;
       }
+
+      final topResult = results.entries.first;
+      final confidence = topResult.value;
+
+      if (confidence <= 0.40) {
+        setState(() {
+          _foodName = "Bukan makanan / Tidak Dikenali";
+          _confidenceScore = "${(confidence * 100).toStringAsFixed(2)}%";
+          _isLoadingML = false;
+          _isUnrecognized = true;
+        });
+        return;
+      }
+
+      setState(() {
+        _foodName = topResult.key;
+        _confidenceScore = "${(confidence * 100).toStringAsFixed(2)}%";
+        _isLoadingML = false;
+        _isLoadingMealDb = true;
+        _isLoadingGemini = true;
+      });
+
+      final mealFuture = _mealDbService.searchMealByName(_foodName).then((data) {
+        if (!mounted) return;
+        setState(() {
+          _recipeData = data;
+          _mealDbStatus = data != null;
+          _isLoadingMealDb = false;
+        });
+      }).catchError((_) {
+        if (!mounted) return;
+        setState(() {
+          _mealDbStatus = false;
+          _isLoadingMealDb = false;
+        });
+      });
+
+      final geminiFuture = _geminiService.getNutritionInfo(_foodName).then((data) {
+        if (!mounted) return;
+        setState(() {
+          _nutritionData = data;
+          _geminiStatus = data != null;
+          _isLoadingGemini = false;
+        });
+      }).catchError((_) {
+        if (!mounted) return;
+        setState(() {
+          _geminiStatus = false;
+          _isLoadingGemini = false;
+        });
+      });
+
+      await Future.wait([mealFuture, geminiFuture]);
+    } catch (e) {
+      if (!mounted) return;
+      setState(() {
+        _foodName = "Gagal menganalisis";
+        _isLoadingML = false;
+        _isLoadingMealDb = false;
+        _isLoadingGemini = false;
+        _isUnrecognized = true;
+      });
     }
   }
 
@@ -124,13 +156,11 @@ class _ResultBodyState extends State<_ResultBody> {
                 ? const ClassificatioinItemShimmer()
                 : ClassificatioinItem(item: _foodName, value: _confidenceScore),
           ),
-          if (!_isLoadingML) ...[
-            if (_isLoadingAPI)
-              const Center(child: CircularProgressIndicator())
-            else ...[
-              _buildNutritionSection(),
-              _buildRecipeSection(),
-            ],
+          if (!_isLoadingML && !_isUnrecognized) ...[
+            _buildNutritionSection(),
+            const SizedBox(height: 8),
+            _buildRecipeSection(),
+            const SizedBox(height: 24),
           ],
         ],
       ),
@@ -138,7 +168,6 @@ class _ResultBodyState extends State<_ResultBody> {
   }
 
   Widget _buildNutritionSection() {
-    if (_nutritionData == null) return const SizedBox();
     return Card(
       margin: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 8.0),
       child: Padding(
@@ -151,19 +180,47 @@ class _ResultBodyState extends State<_ResultBody> {
               style: Theme.of(context).textTheme.titleLarge,
             ),
             const Divider(),
-            Text("Kalori: ${_nutritionData!['kalori'] ?? '-'}"),
-            Text("Karbohidrat: ${_nutritionData!['karbohidrat'] ?? '-'}"),
-            Text("Lemak: ${_nutritionData!['lemak'] ?? '-'}"),
-            Text("Serat: ${_nutritionData!['serat'] ?? '-'}"),
-            Text("Protein: ${_nutritionData!['protein'] ?? '-'}"),
+            if (_isLoadingGemini)
+              const Center(
+                child: Padding(
+                  padding: EdgeInsets.symmetric(vertical: 12.0),
+                  child: CircularProgressIndicator(),
+                ),
+              )
+            else if (_geminiStatus == false || _nutritionData == null)
+              _buildErrorInfo(
+                icon: Icons.info_outline,
+                message: "Informasi nilai gizi tidak tersedia untuk makanan ini.",
+              )
+            else ...[
+              _buildNutritionRow("Kalori", _nutritionData!['kalori']),
+              _buildNutritionRow("Karbohidrat", _nutritionData!['karbohidrat']),
+              _buildNutritionRow("Lemak", _nutritionData!['lemak']),
+              _buildNutritionRow("Serat", _nutritionData!['serat']),
+              _buildNutritionRow("Protein", _nutritionData!['protein']),
+            ],
           ],
         ),
       ),
     );
   }
 
+  Widget _buildNutritionRow(String label, dynamic value) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 4.0),
+      child: Row(
+        children: [
+          Text(
+            "$label: ",
+            style: const TextStyle(fontWeight: FontWeight.w600),
+          ),
+          Text(value?.toString() ?? '-'),
+        ],
+      ),
+    );
+  }
+
   Widget _buildRecipeSection() {
-    if (_recipeData == null) return const SizedBox();
     return Card(
       margin: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 8.0),
       child: Padding(
@@ -172,32 +229,98 @@ class _ResultBodyState extends State<_ResultBody> {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Text(
-              "Resep ${_recipeData!['strMeal']}",
+              "Resep Makanan",
               style: Theme.of(context).textTheme.titleLarge,
             ),
             const Divider(),
-            const Text(
-              "Bahan-bahan:",
-              style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18),
-            ),
-            ...List.generate(20, (index) {
-              final i = index + 1;
-              final ingredient = _recipeData!['strIngredient$i'];
-              final measure = _recipeData!['strMeasure$i'];
-              if (ingredient != null &&
-                  ingredient.toString().trim().isNotEmpty) {
-                return Text("- $ingredient ($measure)");
-              }
-              return const SizedBox();
-            }),
-            const SizedBox(height: 8),
-            const Text(
-              "Instruksi:",
-              style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18),
-            ),
-            Text(_recipeData!['strInstructions'] ?? '-'),
+            if (_isLoadingMealDb)
+              const Center(
+                child: Padding(
+                  padding: EdgeInsets.symmetric(vertical: 12.0),
+                  child: CircularProgressIndicator(),
+                ),
+              )
+            else if (_mealDbStatus == false || _recipeData == null)
+              _buildErrorInfo(
+                icon: Icons.restaurant_menu,
+                message: "Resep tidak ditemukan untuk makanan ini.",
+              )
+            else ...[
+              Text(
+                _recipeData!['strMeal'] ?? '-',
+                style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+              const SizedBox(height: 12),
+
+              // Foto makanan dari MealDB
+              if (_recipeData!['strMealThumb'] != null)
+                ClipRRect(
+                  borderRadius: BorderRadius.circular(8),
+                  child: Image.network(
+                    _recipeData!['strMealThumb'],
+                    height: 200,
+                    width: double.infinity,
+                    fit: BoxFit.cover,
+                    errorBuilder: (context, error, stackTrace) => const SizedBox(),
+                    loadingBuilder: (context, child, loadingProgress) {
+                      if (loadingProgress == null) return child;
+                      return const SizedBox(
+                        height: 200,
+                        child: Center(child: CircularProgressIndicator()),
+                      );
+                    },
+                  ),
+                ),
+              const SizedBox(height: 12),
+
+              const Text(
+                "Bahan-bahan:",
+                style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
+              ),
+              const SizedBox(height: 4),
+              ...List.generate(20, (index) {
+                final i = index + 1;
+                final ingredient = _recipeData!['strIngredient$i'];
+                final measure = _recipeData!['strMeasure$i'];
+                if (ingredient != null && ingredient.toString().trim().isNotEmpty) {
+                  return Padding(
+                    padding: const EdgeInsets.symmetric(vertical: 2.0),
+                    child: Text("• $ingredient (${measure?.toString().trim() ?? ''})"),
+                  );
+                }
+                return const SizedBox();
+              }),
+              const SizedBox(height: 12),
+
+              const Text(
+                "Instruksi:",
+                style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
+              ),
+              const SizedBox(height: 4),
+              Text(_recipeData!['strInstructions'] ?? '-'),
+            ],
           ],
         ),
+      ),
+    );
+  }
+
+  Widget _buildErrorInfo({required IconData icon, required String message}) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 8.0),
+      child: Row(
+        children: [
+          Icon(icon, color: Colors.grey, size: 20),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Text(
+              message,
+              style: TextStyle(color: Colors.grey.shade600, fontSize: 14),
+            ),
+          ),
+        ],
       ),
     );
   }
